@@ -1,20 +1,9 @@
-#!/usr/bin/env python
-
 # -*- coding: utf-8 -*-
 
 # Copyright 2017, IBM.
 #
 # This source code is licensed under the Apache License, Version 2.0 found in
 # the LICENSE.txt file in the root directory of this source tree.
-
-# This tool will print on the standard output a QASM program which instructions
-# were generated randonmly. The program is valid from the point of view of
-# QASM syntax but it has no valid logic. The main purpose of this tool is to
-# help in benchmarking and testing Quantum simulators.
-# Usage example:
-# Creates a QASM circuit file called circuit.qasm with ~100 operations
-# (CX and U3 gates), 16 Qubits, and a seed of 169
-# ./random_qasm_generator.py -s 169 -d 100 -q 16 > circuit.qasm
 
 import argparse
 import os
