@@ -132,7 +132,7 @@ stages:
 # using it with stages and some variables/sections cannot be overridden.
 jobs:
   include:
-    # "reference" stage
+    # "reference environment" stage
     ###########################################################################
     # Tests in the reference (GNU/Linux, Python 3.5) environment.
     - stage: reference environment
