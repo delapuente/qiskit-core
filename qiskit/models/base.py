@@ -38,7 +38,11 @@ class ModelSchema(Schema):
 
         Args:
             valid_data (dict): data collected and returned by ``dump()``.
-            original_data (object): object passed to ``dump()`` in the first place.
+            original_data (object): object passed to ``dump()`` in the first
+            place.
+
+        Returns:
+            dict: the same ``valid_data`` extended with the unknown attributes.
 
         Inspired by https://github.com/marshmallow-code/marshmallow/pull/595.
         """
@@ -56,6 +60,9 @@ class ModelSchema(Schema):
         Args:
             valid_data (dict): validated data returned by ``load()``.
             original_data (dict): data passed to ``load()`` in the first place.
+
+        Returns:
+            dict: the same ``valid_data`` extended with the unknown attributes.
 
         From https://github.com/marshmallow-code/marshmallow/pull/595.
         """
