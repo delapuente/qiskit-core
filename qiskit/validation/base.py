@@ -144,22 +144,25 @@ class BaseSchema(Schema):
 
 class _BindSchema:
     """Aux class to implement the parametrized decorator ``bind_schema``.
-
-    TODO:
-        - Raise if trying to bind a schema more than once.
     """
 
-    def __init__(self, schema):
+    def __init__(self, schema_cls):
         """Get the schema for the decorated model."""
-        self._schema = schema
+        self._schema_cls = schema_cls
 
     def __call__(self, model_cls):
         """Augment the model class with the validation API.
 
         See the docs for ``bind_schema`` for further information.
         """
-        self._schema.model_cls = model_cls
-        model_cls.schema = self._schema()
+        if self._schema_cls.__dict__.get('model_cls', None) is not None:
+            raise ValueError(
+                'The schema {} can not be bound twice. It is already bound to '
+                '{}. If you want to reuse the schema, use '
+                'subclassing'.format(self._schema_cls, self._schema_cls.model_cls))
+
+        self._schema_cls.model_cls = model_cls
+        model_cls.schema = self._schema_cls()
         model_cls._validate = self._validate
         model_cls.to_dict = self._to_dict
         model_cls.from_dict = classmethod(self._from_dict)
@@ -221,5 +224,29 @@ def bind_schema(schema):
     To ease serialization/deserialization to/from simple Python objects,
     classes are provided with ``to_dict`` and ``from_dict`` instance and class
     methods respectively.
+
+    The same schema cannot be bound more than once. If you need to reuse a
+    schema for a different class, create a new schema subclassing the one you
+    want to reuse and leave the new empty::
+
+        class MySchema(BaseSchema):
+            title = String()
+
+        class AnotherSchema(MySchema):
+            pass
+
+        @bind_schema(MySchema):
+        class MyModel(BaseModel):
+            pass
+
+        @bind_schema(AnotherSchema):
+        class AnotherModel(BaseModel):
+            pass
+
+    Raises:
+        ValueError: when trying to bind the same schema more than once.
+
+    Return:
+        type: the same class with validation capabilities.
     """
     return _BindSchema(schema)
