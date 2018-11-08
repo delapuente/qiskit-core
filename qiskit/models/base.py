@@ -6,34 +6,22 @@
 # the LICENSE.txt file in the root directory of this source tree.
 
 """Building blocks for schema validations."""
-
+from functools import wraps
 from types import SimpleNamespace
 
+from marshmallow import ValidationError
 from marshmallow import Schema, post_dump, post_load
 
 
-class BaseSchema(Schema):
-    """Base Schema."""
+class ModelSchema(Schema):
 
     model_cls = SimpleNamespace
 
-    class Meta:
-        """Default class options."""
-        unknown = 'INCLUDE'
-
-    @post_load(pass_original=True)
-    def add_original_data_load(self, valid_data, original_data):
-        """Allow including unknown fields in the serialized result.
-
-        Inspired by https://github.com/marshmallow-code/marshmallow/pull/595.
-        """
-        additional_keys = set(original_data) - set(valid_data)
-        for key in additional_keys:
-            valid_data[key] = original_data[key]
-        return valid_data
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     @post_dump(pass_original=True)
-    def add_original_data_dump(self, valid_data, original_data):
+    def dump_additional_data(self, valid_data, original_data):
         """Allow including unknown fields in the deserialized result.
 
         Inspired by https://github.com/marshmallow-code/marshmallow/pull/595.
@@ -43,45 +31,64 @@ class BaseSchema(Schema):
             valid_data[key] = getattr(original_data, key)
         return valid_data
 
+    @post_load(pass_original=True)
+    def load_additional_data(self, valid_data, original_data):
+        # From https://github.com/marshmallow-code/marshmallow/pull/595.
+
+        additional_keys = set(original_data) - set(valid_data)
+        for key in additional_keys:
+            valid_data[key] = original_data[key]
+        return valid_data
+
     @post_load
     def make_model(self, data):
-        """Create a new model."""
-        return self.model_cls(**data, validate=False)
+        return self.model_cls(**data)
 
 
-class MetaModel(type):
-    """Meta Model."""
+class BindSchema:
 
-    def __new__(mcs, *args, **kwargs):
-        cls = type.__new__(mcs, *args, **kwargs)
-        if (hasattr(cls, 'schema_cls') and isinstance(cls.schema_cls, type) and
-                issubclass(cls.schema_cls, BaseSchema)):
-            cls.schema_cls.model_cls = cls
+    def __init__(self, schema):
+        self._schema = schema
 
+    def __call__(self, cls):
+        self._schema.model_cls = cls
+        cls.schema = self._schema()
+        cls.to_dict = self._to_dict
+        cls.from_dict = classmethod(self._from_dict)
+        cls.__init__ = self._validate_after_init(cls.__init__)
         return cls
 
+    @staticmethod
+    def _to_dict(self):
+        data, errors = self.schema.dump(self)
+        if errors:
+            raise ValidationError(errors)
+        return data
 
-class BaseModel(SimpleNamespace, metaclass=MetaModel):
-    """"Base Model."""
+    @staticmethod
+    def _from_dict(cls, dct):
+        data, errors = cls.schema.load(dct)
+        if errors:
+            raise ValidationError(errors)
+        return data
 
-    schema_cls = BaseSchema
+    @staticmethod
+    def _validate_after_init(init_method):
 
-    def __init__(self, validate=True, **kwargs):
-        super().__init__(**kwargs)
+        @wraps(init_method)
+        def _decorated(self, *args, **kwargs):
+            init_method(self, *args, **kwargs)
+            errors = self.schema.validate(self.to_dict())
+            if errors:
+                raise ValidationError(errors)
 
-        if validate:
-            self.validate()
+        _decorated._validating = False
 
-    def validate(self):
-        """Validate."""
-        # TODO: .validate() returns dict of errors, and we need full validation
-        self.schema_cls().load(self.schema_cls().dump(self))
+        return _decorated
 
-    def to_dict(self):
-        """Serialize this model to a dictionary."""
-        return self.schema_cls().dump(self)
 
-    @classmethod
-    def from_dict(cls, data):
-        """Create a model from a dictionary."""
-        return cls.schema_cls().load(data)
+class BaseModel(SimpleNamespace):
+    pass
+
+def bind_schema(schema):
+    return BindSchema(schema)
