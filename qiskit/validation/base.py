@@ -17,7 +17,7 @@ from marshmallow import ValidationError
 from marshmallow import Schema, post_dump, post_load
 
 
-class ModelSchema(Schema):
+class BaseSchema(Schema):
     """Provide deserialization into class instances instead of dicts.
 
     Conveniently for the Qiskit common case, this class also loads and dumps

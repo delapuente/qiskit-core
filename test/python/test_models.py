@@ -10,16 +10,16 @@
 
 from marshmallow import fields, ValidationError
 
-from qiskit.models.base import BaseModel, ModelSchema, bind_schema
+from qiskit.validation.base import BaseModel, BaseSchema, bind_schema
 from .common import QiskitTestCase
 
 
-class PersonSchema(ModelSchema):
+class PersonSchema(BaseSchema):
     """Example Person schema."""
     name = fields.String(required=True)
 
 
-class BookSchema(ModelSchema):
+class BookSchema(BaseSchema):
     """Example Book schema."""
     title = fields.String(required=True)
     date = fields.Date()
