@@ -8,8 +8,8 @@
 """Building blocks for Qiskit validated classes.
 
 The module contains bases and utilities for validation."""
-
-from functools import wraps
+from abc import ABC
+from functools import wraps, partial
 from types import SimpleNamespace
 
 from marshmallow import ValidationError
@@ -17,67 +17,48 @@ from marshmallow import Schema, post_dump, post_load
 from marshmallow_polyfield import PolyField
 
 
-class OneTypeOf(PolyField):
-    """Enable polymorphic fields.
+class BasePolyField(ABC, PolyField):
 
-    A field is polymorphic if its data can be of multiple types. In this case,
-    use this field providing a dict of strings and schema instances, and a
-    hinter function. The hinter function must return one of the keys in the dict
-    to select the proper schema::
+    def __init__(self, choices, many=False, **metadata):
+        to_dict_selector = partial(self.to_dict_selector, choices)
+        from_dict_selector = partial(self.from_dict_selector, choices)
+        PolyField.__init__(
+            self, to_dict_selector, from_dict_selector, many, metadata)
 
-        def load_book_or_album(data):
-            return 'Book' if 'author' in data else 'Album'
+    def to_dict_selector(self, choices, *args, **kwargs):
+        raise NotImplemented()
 
-        def dump_book_or_album(data):
-            return data.__class__.__name__
+    def from_dict_selector(self, choices, *args, **kwargs):
+        raise NotImplemented()
 
-        class Library(BaseSchema):
-            collection = List(
-                OneTypeOf({'Book': BookSchema(), 'Album': AlbumSchema()},
-                hinter=load_book_or_album, dump_hinter=dump_book_or_album)
 
-    Args:
-        choices (dict): dict of strings and schema instances with the available
-            schemas.
-        hinter (function): function used to choose the schema to use while
-            deserialization. The return value must be one of the keys in the
-            ``choices`` dictionary.
-        dump_hinter (function): functions used to choose the schema to use while
-            serialization. If none is provided, ``hinter`` is provided instead.
-            The return value must be one of the keys in the ``choices``
-            dictionary.
-        many (bool): whether the field is a collection of objects.
-        kwargs (dict): the same keyword arguments that ``PolyField`` receives.
-    """
+class TryFrom(BasePolyField):
 
-    def __init__(self, choices, hinter=None, dump_hinter=None, many=False, **kwargs):
-        self._choices = choices
-        self._load_hinter = hinter
-        self._dump_hinter = dump_hinter or hinter
-        super().__init__(
-            self._serialization_selector, self._deserialization_selector, many, **kwargs)
+    def to_dict_selector(self, choices, data):
+        for schema_cls in choices:
+            try:
+                schema = schema_cls(strict=True)
+                data, errors = schema.dump(data).data
+                if not errors:
+                    schema.load(data)
+                    return schema_cls
+            except Exception:
+                pass
 
-    def _serialization_selector(self, data, _):
-        hint = self._dump_hinter(data)
-        try:
-            schema = self._choices[hint]
-        except KeyError:
-            raise ValidationError(
-                'Cannot find a schema for {}. The hint \'{}\' must be one of '
-                '{}.'.format(data, hint, self._choices.keys()))
+        raise ValueError(
+            'Cannot find a schema for {} among {}.'.format(data, self._choices))
 
-        return schema
+    def from_dict_selector(self, choices, data):
+        for schema_cls in choices:
+            try:
+                schema = schema_cls(strict=True)
+                schema.load(data)
+                return schema_cls
+            except Exception:
+                pass
 
-    def _deserialization_selector(self, data, _):
-        hint = self._load_hinter(data)
-        try:
-            schema = self._choices[hint]
-        except KeyError:
-            raise ValidationError(
-                'Cannot find a schema for {}. The hint \'{}\' must be one of '
-                '{}.'.format(data, hint, self._choices.keys()))
-
-        return schema
+        raise ValueError(
+            'Cannot find a schema for {} among {}.'.format(data, self._choices))
 
 
 class BaseSchema(Schema):
