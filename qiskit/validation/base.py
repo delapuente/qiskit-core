@@ -22,7 +22,7 @@ together by using ``bind_schema``::
     class Person(BaseModel):
         pass
 """
-
+from copy import deepcopy
 from functools import wraps
 from types import SimpleNamespace
 
@@ -44,6 +44,8 @@ class BaseSchema(Schema):
     """
 
     model_cls = SimpleNamespace
+
+    serialization_cache = {}
 
     @post_dump(pass_original=True)
     def dump_additional_data(self, valid_data, original_data):
@@ -93,6 +95,13 @@ class BaseSchema(Schema):
         """
         return self.model_cls(**data)
 
+    def dump(self, obj, **kwargs):
+        """Cached version of ``dump`` to avoid repeated serialization."""
+        key = id(obj)
+        if key not in self.serialization_cache:
+            self.serialization_cache[key] = super().dump(obj, **kwargs)
+        return deepcopy(self.serialization_cache[key])
+
 
 class _SchemaBinder:
     """Helper class for the parametrized decorator ``bind_schema``."""
@@ -115,6 +124,7 @@ class _SchemaBinder:
         self._schema_cls.model_cls = model_cls
         model_cls.schema = self._schema_cls()
         model_cls._validate = self._validate
+        model_cls._invalidate = self._invalidate
         model_cls.to_dict = self._to_dict
         model_cls.from_dict = classmethod(self._from_dict)
         model_cls.__init__ = self._validate_after_init(model_cls.__init__)
@@ -134,6 +144,14 @@ class _SchemaBinder:
         errors = instance.schema.validate(instance.to_dict())
         if errors:
             raise ValidationError(errors)
+
+    @staticmethod
+    def _invalidate(instance):
+        """Mark the instance as invalid removing it from the serialization cache.
+        """
+        key = id(instance)
+        if key in BaseSchema.serialization_cache:
+            del BaseSchema.serialization_cache[key]
 
     @staticmethod
     def _from_dict(decorated_cls, dct):

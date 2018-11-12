@@ -7,6 +7,7 @@
 
 
 """Models tests."""
+from datetime import datetime
 
 from marshmallow import fields, ValidationError
 
@@ -92,10 +93,8 @@ class TestModels(QiskitTestCase):
 
     def test_serialize_nested(self):
         """Test model serialization to dict, with nested fields."""
-        book = Book(title='A Book', author=Person(name='Foo', other='bar'))
-        self.assertEqual(book.to_dict(),
-                         {'title': 'A Book',
-                          'author': {'name': 'Foo', 'other': 'bar'}})
+        book = Book(title='A Book', author=Person(name='Foo', other='bar'), date=datetime(2009, 1, 1))
+
 
 
 class TestSchemas(QiskitTestCase):
